@@ -5,6 +5,8 @@ Cara kerja:
 - Membuka Google Chrome terpasang (bukan Chromium Playwright) seperti pengguna biasa.
 - Menyimpan sesi di data/chrome-profile agar captcha cukup diselesaikan sekali.
 - Menangkap JSON halaman pencarian + ulasan, plus cadangan dari tautan DOM.
+- Produk dengan ulasan berteks kurang dari batas minimal dilewati (tidak disimpan).
+  Kandidat produk dikumpulkan lebih banyak, lalu berhenti saat target produk lolos terpenuhi.
 """
 
 from __future__ import annotations
@@ -45,8 +47,20 @@ ITEM_ID_PATTERN = re.compile(r"(?:-i\.|/product/)(\d+)\.(\d+)|/product/(\d+)/(\d
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Kumpulkan produk laptop dan ulasan Shopee.")
     parser.add_argument("--keyword", default="laptop", help="Kata kunci pencarian")
-    parser.add_argument("--max-products", type=int, default=100, help="Jumlah produk target")
-    parser.add_argument("--reviews-per-product", type=int, default=10, help="Ulasan berteks per produk")
+    parser.add_argument("--max-products", type=int, default=5, help="Jumlah produk lolos yang ditargetkan")
+    parser.add_argument("--reviews-per-product", type=int, default=10, help="Ulasan berteks yang diambil per produk")
+    parser.add_argument(
+        "--min-reviews",
+        type=int,
+        default=None,
+        help="Minimal ulasan berteks agar produk disimpan (default: sama dengan --reviews-per-product)",
+    )
+    parser.add_argument(
+        "--candidate-multiplier",
+        type=int,
+        default=3,
+        help="Kumpulkan kandidat produk sebanyak max-products x angka ini (cadangan jika ada yang dilewati)",
+    )
     parser.add_argument("--output-dir", default="data", help="Folder hasil")
     parser.add_argument("--headless", action="store_true", help="Jalankan tanpa jendela browser")
     parser.add_argument("--min-delay", type=float, default=2.5, help="Jeda minimum antar produk (detik)")
@@ -830,6 +844,16 @@ def main() -> int:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Batas minimal ulasan agar produk disimpan.
+    min_reviews = args.min_reviews if args.min_reviews is not None else args.reviews_per_product
+    if min_reviews > args.reviews_per_product:
+        print(
+            f"--min-reviews ({min_reviews}) lebih besar dari --reviews-per-product "
+            f"({args.reviews_per_product}); minimal diturunkan menjadi {args.reviews_per_product}."
+        )
+        min_reviews = args.reviews_per_product
+    candidate_target = args.max_products * max(args.candidate_multiplier, 1)
+
     with sync_playwright() as p:
         try:
             context = launch_context(p, args.headless, output_dir, args.isolated_profile)
@@ -840,15 +864,23 @@ def main() -> int:
         try:
             page = context.pages[0] if context.pages else context.new_page()
             try:
-                page, products = collect_products_from_search(page, args.keyword, args.max_products, output_dir)
-                if not products:
+                page, candidates = collect_products_from_search(page, args.keyword, candidate_target, output_dir)
+                if not candidates:
                     dump_debug(page, output_dir, "search_empty")
                     print("Tidak ada produk yang terkumpul. Lihat data/debug dan selesaikan captcha di jendela browser skrip.")
                     return 1
 
+                print(
+                    f"\nKandidat: {len(candidates)} produk | Target lolos: {args.max_products} | "
+                    f"Minimal ulasan: {min_reviews}"
+                )
+
                 all_reviews: list[dict[str, Any]] = []
-                for idx, product in enumerate(products, start=1):
-                    print(f"[{idx}/{len(products)}]")
+                kept_products: list[dict[str, Any]] = []
+                skipped = 0
+
+                for idx, product in enumerate(candidates, start=1):
+                    print(f"[{idx}/{len(candidates)}] lolos: {len(kept_products)}/{args.max_products}")
                     page, reviews = collect_reviews_for_product(
                         page,
                         product,
@@ -856,11 +888,30 @@ def main() -> int:
                         args.min_delay,
                         args.max_delay,
                     )
-                    all_reviews.extend(reviews)
-                    if idx % 5 == 0:
-                        save_outputs(output_dir, products[:idx], all_reviews)
 
-                save_outputs(output_dir, products, all_reviews)
+                    if len(reviews) < min_reviews:
+                        skipped += 1
+                        print(f"    Dilewati: hanya {len(reviews)} ulasan (minimal {min_reviews}).")
+                        continue
+
+                    kept_products.append(product)
+                    all_reviews.extend(reviews)
+
+                    if len(kept_products) % 5 == 0:
+                        save_outputs(output_dir, kept_products, all_reviews)
+
+                    if len(kept_products) >= args.max_products:
+                        print("Target produk terpenuhi.")
+                        break
+
+                if len(kept_products) < args.max_products:
+                    print(
+                        f"\nPeringatan: hanya {len(kept_products)} dari {args.max_products} produk "
+                        f"yang memenuhi minimal {min_reviews} ulasan "
+                        f"({skipped} dilewati). Naikkan --candidate-multiplier atau turunkan --min-reviews."
+                    )
+
+                save_outputs(output_dir, kept_products, all_reviews)
             finally:
                 if not _KEEP_BROWSER:
                     try:
