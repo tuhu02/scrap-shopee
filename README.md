@@ -1,4 +1,4 @@
-# Scrape Shopee
+# Scrap Shopee
 
 Skrip Python untuk mengumpulkan data produk laptop dan ulasan berteks dari halaman publik Shopee Indonesia.
 
@@ -46,15 +46,15 @@ Chrome akan terbuka dengan salinan profil harian Anda. Jika Shopee meminta login
 
 ### Opsi
 
-| Opsi                    | Default  | Keterangan                                                      |
-| ----------------------- | -------- | --------------------------------------------------------------- |
-| `--keyword`             | `laptop` | Kata kunci pencarian                                            |
-| `--max-products`        | `100`    | Jumlah produk target                                            |
-| `--reviews-per-product` | `10`     | Jumlah ulasan berteks per produk                                |
-| `--output-dir`          | `data`   | Folder penyimpanan hasil                                        |
-| `--min-delay`           | `2.5`    | Jeda minimum antar produk (detik)                               |
-| `--max-delay`           | `5.0`    | Jeda maksimum antar produk (detik)                              |
-| `--isolated-profile`    | nonaktif | Memakai profil Chrome terpisah (lebih sering diblokir Shopee)   |
+| Opsi                    | Default  | Keterangan                                                        |
+| ----------------------- | -------- | ----------------------------------------------------------------- |
+| `--keyword`             | `laptop` | Kata kunci pencarian                                              |
+| `--max-products`        | `100`    | Jumlah produk target                                              |
+| `--reviews-per-product` | `10`     | Jumlah ulasan berteks per produk                                  |
+| `--output-dir`          | `data`   | Folder penyimpanan hasil                                          |
+| `--min-delay`           | `2.5`    | Jeda minimum antar produk (detik)                                 |
+| `--max-delay`           | `5.0`    | Jeda maksimum antar produk (detik)                                |
+| `--isolated-profile`    | nonaktif | Memakai profil Chrome terpisah (lebih sering diblokir Shopee)     |
 | `--headless`            | nonaktif | Tanpa jendela browser (hanya berlaku dengan `--isolated-profile`) |
 
 ## Hasil
